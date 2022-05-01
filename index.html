@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Capterra Method</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+		<!-- jQuery first, then Popper.js, then Bootstrap JS -->
+		<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+		<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/async@3.2.3/dist/async.min.js"></script>
+	</head>
+	<body>
+		<div class="container-fluid p-5 bg-primary text-white text-center">
+			<h1>Capterra Method Software</h1>
+		</div>
+
+		<div class="container mt-5">
+			<div class="row">
+				<textarea id="raw_json"></textarea>
+				<button type="button" class="btn btn-success" id="convert_button">Convert JSON</button><br />
+				<button type="button" class="btn btn-warning" id="aff_prog_button">Fetch Affiliate Program Availability</button><br /><br />
+				<button type="button" class="btn btn-info" id="save_button">Save CSV</button><br />
+
+				<textarea id="keywords"></textarea>
+				<button type="button" class="btn btn-success" id="apply_kw_volume_button">Apply Keyword Search Volume</button><br />
+				<h1 id="category_name"></h1>
+				<div id="summary"></div>
+				<div id="status"></div>
+				<table class="table">
+					<thead>
+						<tr>
+							<th scope="col">Name</th>
+							<th scope="col">Reviews</th>
+							<th scope="col">Rating</th>
+							<th scope="col">URL</th>
+
+							<th scope="col">No Ad Competition</th>
+							<th scope="col">Google Ad Competition</th>
+							<th scope="col">Has Affiliate Program</th>
+							<th scope="col">Affiliate keyword Search</th>
+						</tr>
+					</thead>
+					<tbody id="results"></tbody>
+				</table>
+			</div>
+		</div>
+
+		<script>
+			$(document).ready(() => {
+				let productsArr = []
+				let jsonObject = {}
+				let keywordsSearch = []
+				$("#convert_button").on("click", (e) => {
+					let json = $("#raw_json").val()
+					try {
+						jsonObject = JSON.parse(json)
+						if (jsonObject["pageData"]) {
+							if (jsonObject["pageData"]["categoryData"]) {
+								if (jsonObject["pageData"]["categoryData"]["products"]) {
+									$("#category_name").html(jsonObject["pageData"]["categoryData"]["linkName"])
+									$("#results").html("")
+									let html = ""
+									jsonObject["pageData"]["categoryData"]["products"].forEach((product, productInd) => {
+										keywordsSearch.push(product["product_name"])
+										productsArr.push([product["product_name"], product["total_reviews"], product["sort_options"]["sort_review_rating"].toFixed(2), product["product_url"], false, false])
+
+										html += `<tr id="row_${productInd}">
+															<th scope="row">${product["product_name"]}</th>
+															<td>${product["total_reviews"]}</td>
+															<td>${product["sort_options"]["sort_review_rating"].toFixed(2)}</td>
+															<td><a href="${product["product_url"]}" target="_blank">${product["product_name"]}</a></td>
+															<th><input class="form-check-input no-comp" type="checkbox" value="" id="no-comp-${productInd}"></th>
+															<td><a href="https://www.google.com/search?q=${encodeURI(product["product_name"])}&cr=countryUS" target="_blank">Google Search: ${product["product_name"]}</a></td>
+															<th><input class="form-check-input has-aff-prog" type="checkbox" value="" id="has-aff-prog-${productInd}"></th>
+															<td class="aff" id="aff_${product["product_id"]}">NA</td>
+														</tr>`
+									})
+									$("#results").html(html)
+									$("#summary").html(`<p>Total: ${jsonObject["pageData"]["categoryData"]["products"].length}`)
+									$("#keywords").html(keywordsSearch.join("\r\n"))
+									$(".no-comp").on("click", (e) => {
+										let isSelected = $(e.currentTarget).is(":checked")
+										let productInd = $(e.currentTarget).attr("id").split("no-comp-")[1]
+										productsArr[productInd][4] = isSelected
+										console.log(productsArr[productInd])
+									})
+									$(".has-aff-prog").on("click", (e) => {
+										let isSelected = $(e.currentTarget).is(":checked")
+										let productInd = $(e.currentTarget).attr("id").split("has-aff-prog-")[1]
+										productsArr[productInd][5] = isSelected
+										console.log(productsArr[productInd])
+									})
+								} else alert("products missing")
+							} else alert("categoryData missing")
+						} else alert("pageData Missing")
+					} catch (err) {
+						console.log(err.message)
+					}
+				})
+
+				$("#aff_prog_button").on("click", () => {
+					getAffProgAvail(jsonObject["pageData"]["categoryData"]["products"])
+				})
+
+				$("#save_button").on("click", () => {
+					let noAdsAndAffProg = []
+					let affProg = []
+					let noAds = []
+					let rest = []
+					productsArr.forEach((prod) => {
+						if (prod[4] && prod[5]) noAdsAndAffProg.push(prod)
+						else if (prod[5]) affProg.push(prod)
+						else if (prod[4]) noAds.push(prod)
+						else rest.push(prod)
+					})
+					let sortedProductArr = noAdsAndAffProg.concat(affProg.concat(noAds.concat(rest)))
+					sortedProductArr.unshift(["Name", "Reviews", "Rating", "URL", "No Ad Competition", "Has Affiliate Program"])
+					axios
+						.post(`http://localhost:8989/createCsv`, { category: $("#category_name").text(), data: sortedProductArr })
+						.then((res) => {
+							$("#summary").html(`<p>File Downloaded: <a href="${res["data"]["result"]}" target="_blank">Download File</a>`)
+						})
+						.catch((err) => {
+							$("#summary").html(`<p>ERROR: ${err.message}`)
+						})
+				})
+
+				function getAffProgAvail(products) {
+					console.log("**Atempting to fetch " + products.length + " affiliate program availability.")
+
+					let statusHtml = `<p>0/${products.length} completed.</p>`
+					$("#status").html(statusHtml)
+
+					let processes = products.map((product, productInd) => {
+						return (done) => {
+							let statusHtml = `<p>${productInd}/${products.length} completed.</p>`
+							statusHtml += `<p>Fetching Affiliate Program Availability for <b>${product["product_name"]}</b>...</p>`
+							$("#status").html(statusHtml)
+							console.log("START Fetching " + product["product_name"])
+							$("#aff_" + product["product_id"]).text("fetching...")
+							axios
+								.post(`http://localhost:8989/hasAffiliateProgram`, { site: product["product_url"] })
+								.then((res) => {
+									$("#aff_" + product["product_id"]).text(res["data"]["result"])
+									if (res["data"]["result"] == true) {
+										$("#has-aff-prog-" + productInd).prop("checked", true)
+									} else {
+										$("#row_" + productInd).hide()
+									}
+									productsArr[productInd][5] = res["data"]["result"]
+									console.log("**DONE Fetching " + product["product_name"])
+									done(null, { product: product["product_name"], result: res["data"]["result"] })
+								})
+								.catch((err) => {
+									$("#aff_" + product["product_id"]).text(err.message)
+									console.log("**DONE Fetching " + product["product_name"])
+									done(null, { product: product["product_name"], result: false })
+								})
+						}
+					})
+
+					async.series(processes, (err, res) => {
+						console.log("**DONE FETCHING " + products.length + " products affiliate program availability.")
+						let statusHtml = `<p>${products.length}/${products.length} completed.</p>`
+						statusHtml += `<p>Fetching Complete.</p>`
+						$("#status").html(statusHtml)
+					})
+				}
+			})
+		</script>
+	</body>
+</html>
