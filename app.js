@@ -20,7 +20,7 @@ const getCapterraCategoryNames = () => {
 const hasAffiliateProgram = (website) => {
 	return new Promise((resolve, reject) => {
 		console.log("hasAffiliateProgram: " + website)
-		let searchKeywords = ["affiliate", "ambassador", "referal"]
+		let searchKeywords = ["affiliate", "ambassador"]
 		getPageBody(website)
 			.then((res) => {
 				let bodyText = JSON.stringify(res).toLowerCase()
@@ -52,19 +52,6 @@ const hasSerpAds = (keyword) => {
 	})
 }
 
-const arrayToCsv = (data) => {
-	return data
-		.map(
-			(row) =>
-				row
-					.map(String) // convert every value to String
-					.map((v) => (typeof v === String ? v.replaceAll('"', '""') : v)) // escape double colons
-					.map((v) => `"${v}"`) // quote it
-					.join(",") // comma-separated
-		)
-		.join("\r\n") // rows starting on new lines
-}
-
 const isValidUrl = (url) => {
 	try {
 		new URL(url)
@@ -94,20 +81,11 @@ app.post("/hasAffiliateProgram", (req, res) => {
 	}
 })
 
-app.post("/createCsv", (req, res) => {
-	let { category, data } = req.body
-	let fileName = category + "_data_" + new Date().getTime() + ".csv"
-
-	fs.writeFile(fileName, arrayToCsv(data), () => {
-		res.send({ result: path.join(__dirname, "/" + fileName) })
-	})
-})
-
 app.get("/", async (req, res) => {
 	res.render(path.join(__dirname, "/index.html"), { data: {} })
 })
 
 const port = 8989
 app.listen(port, () => {
-	console.log(` ---- Capterra Tool ${port} ${new Date()}  ---- `)
+	console.log(` ---- Capterra Tool http://localhost:${port}/ ${new Date()}  ---- `)
 })

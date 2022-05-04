@@ -12,6 +12,11 @@
 		<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 		<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/async@3.2.3/dist/async.min.js"></script>
 	</head>
+	<style>
+		small {
+			font-size: 0.6rem;
+		}
+	</style>
 	<body>
 		<div class="container-fluid p-5 bg-primary text-white text-center">
 			<h1>Capterra Method Software</h1>
@@ -20,15 +25,28 @@
 		<div class="container mt-5">
 			<div class="row">
 				<textarea id="raw_json"></textarea>
-				<button type="button" class="btn btn-success" id="convert_button">Convert JSON</button><br />
-				<button type="button" class="btn btn-warning" id="aff_prog_button">Fetch Affiliate Program Availability</button><br /><br />
-				<button type="button" class="btn btn-info" id="save_button">Save CSV</button><br />
-
+				<button type="button" class="btn btn-success" id="convert_button">Convert JSON</button>
+				<button type="button" class="btn btn-warning" id="aff_prog_button">Fetch Affiliate Program Availability</button>
+			</div>
+			<br />
+			<div class="row">
 				<textarea id="keywords"></textarea>
+				<a type="button" class="btn btn-info" href="https://searchvolume.io/" target="_blank">Open KW Search Tool</a><br />
 				<button type="button" class="btn btn-success" id="apply_kw_volume_button">Apply Keyword Search Volume</button><br />
+			</div>
+			<br />
+			<div class="row">
 				<h1 id="category_name"></h1>
 				<div id="summary"></div>
 				<div id="status"></div>
+				<div id="dl_link"></div>
+			</div>
+			<br />
+			<div class="row">
+				<button type="button" class="btn btn-info" id="save_button">Save CSV</button>
+			</div>
+			<br />
+			<div class="row">
 				<table class="table">
 					<thead>
 						<tr>
@@ -36,6 +54,7 @@
 							<th scope="col">Reviews</th>
 							<th scope="col">Rating</th>
 							<th scope="col">URL</th>
+							<th scope="col">Keywords Search</th>
 
 							<th scope="col">No Ad Competition</th>
 							<th scope="col">Google Ad Competition</th>
@@ -53,6 +72,8 @@
 				let productsArr = []
 				let jsonObject = {}
 				let keywordsSearch = []
+				let productNames = []
+				let capterraProducts = []
 				$("#convert_button").on("click", (e) => {
 					let json = $("#raw_json").val()
 					try {
@@ -63,35 +84,46 @@
 									$("#category_name").html(jsonObject["pageData"]["categoryData"]["linkName"])
 									$("#results").html("")
 									let html = ""
-									jsonObject["pageData"]["categoryData"]["products"].forEach((product, productInd) => {
-										keywordsSearch.push(product["product_name"])
-										productsArr.push([product["product_name"], product["total_reviews"], product["sort_options"]["sort_review_rating"].toFixed(2), product["product_url"], false, false])
+									capterraProducts = jsonObject["pageData"]["categoryData"]["products"].filter((product) => parseInt(product["total_reviews"]) >= 50)
+									capterraProducts.forEach((product, productInd) => {
+										productsArr.push([product["product_name"].trim(), product["total_reviews"], product["sort_options"]["sort_review_rating"].toFixed(2), product["product_url"], 0, false, false, jsonObject["pageData"]["categoryData"]["linkName"]])
 
 										html += `<tr id="row_${productInd}">
 															<th scope="row">${product["product_name"]}</th>
 															<td>${product["total_reviews"]}</td>
 															<td>${product["sort_options"]["sort_review_rating"].toFixed(2)}</td>
 															<td><a href="${product["product_url"]}" target="_blank">${product["product_name"]}</a></td>
-															<th><input class="form-check-input no-comp" type="checkbox" value="" id="no-comp-${productInd}"></th>
-															<td><a href="https://www.google.com/search?q=${encodeURI(product["product_name"])}&cr=countryUS" target="_blank">Google Search: ${product["product_name"]}</a></td>
+															<td><span id="${productInd}_kw_vol"></span></td>
+															<th><input class="form-check-input no-comp" type="checkbox" value="" id="no-comp-${productInd}" name="${product["product_name"]}"></th>
+															<td><a class="manual_ad_comp_link" id="manual_ad_comp_${productInd}" href="https://www.google.com/search?q=${encodeURI(product["product_name"])}&cr=countryUS" target="_blank">${product["product_name"]}</a> <small id="manual_ad_${productInd}"></small></td>
 															<th><input class="form-check-input has-aff-prog" type="checkbox" value="" id="has-aff-prog-${productInd}"></th>
 															<td class="aff" id="aff_${product["product_id"]}">NA</td>
 														</tr>`
 									})
 									$("#results").html(html)
-									$("#summary").html(`<p>Total: ${jsonObject["pageData"]["categoryData"]["products"].length}`)
-									$("#keywords").html(keywordsSearch.join("\r\n"))
+									$("#summary").html(`<p>Total: ${capterraProducts.length}`)
 									$(".no-comp").on("click", (e) => {
 										let isSelected = $(e.currentTarget).is(":checked")
 										let productInd = $(e.currentTarget).attr("id").split("no-comp-")[1]
-										productsArr[productInd][4] = isSelected
-										console.log(productsArr[productInd])
+										let productName = $(e.currentTarget).attr("name")
+										let hasAffChecked = $("#has-aff-prog-" + productInd).is(":checked")
+										productsArr[productInd][5] = isSelected
+										if (isSelected && hasAffChecked) {
+											keywordsSearch.push(productName)
+										} else {
+											let index = keywordsSearch.indexOf(productName)
+											keywordsSearch.splice(index, 1)
+										}
+										$("#keywords").html(keywordsSearch.join("\r\n"))
 									})
 									$(".has-aff-prog").on("click", (e) => {
 										let isSelected = $(e.currentTarget).is(":checked")
 										let productInd = $(e.currentTarget).attr("id").split("has-aff-prog-")[1]
-										productsArr[productInd][5] = isSelected
-										console.log(productsArr[productInd])
+										productsArr[productInd][6] = isSelected
+									})
+									$(".manual_ad_comp_link").on("click", (e) => {
+										let productInd = $(e.currentTarget).attr("id").split("manual_ad_comp_")[1]
+										$("#manual_ad_" + productInd).html("<span style='color: green;'>Manually Checked</span>")
 									})
 								} else alert("products missing")
 							} else alert("categoryData missing")
@@ -101,8 +133,25 @@
 					}
 				})
 
+				$("#apply_kw_volume_button").on("click", () => {
+					let keywordvalues = $("#keywords").val()
+					keywordvalues = keywordvalues.split(`Keyword;Avg. monthly searches`)[1]
+					keywordvalues = keywordvalues.split("\n").filter((x) => x != "")
+					keywordvalues.forEach((kw) => {
+						let kwArr = kw.split(";")
+						let curInd = -1
+						productsArr.forEach((prod, prodInd) => {
+							if (prod[0].toLowerCase() == kwArr[0].toLowerCase()) curInd = prodInd
+						})
+						if (productsArr[curInd]) {
+							$(`#${curInd}_kw_vol`).text(kwArr[1])
+							productsArr[curInd][4] = kwArr[1]
+						} else console.log(" ***Couldn't find => " + kwArr[0].toLowerCase())
+					})
+				})
+
 				$("#aff_prog_button").on("click", () => {
-					getAffProgAvail(jsonObject["pageData"]["categoryData"]["products"])
+					getAffProgAvail(capterraProducts)
 				})
 
 				$("#save_button").on("click", () => {
@@ -114,19 +163,26 @@
 						if (prod[4] && prod[5]) noAdsAndAffProg.push(prod)
 						else if (prod[5]) affProg.push(prod)
 						else if (prod[4]) noAds.push(prod)
-						else rest.push(prod)
 					})
-					let sortedProductArr = noAdsAndAffProg.concat(affProg.concat(noAds.concat(rest)))
-					sortedProductArr.unshift(["Name", "Reviews", "Rating", "URL", "No Ad Competition", "Has Affiliate Program"])
-					axios
-						.post(`http://localhost:8989/createCsv`, { category: $("#category_name").text(), data: sortedProductArr })
-						.then((res) => {
-							$("#summary").html(`<p>File Downloaded: <a href="${res["data"]["result"]}" target="_blank">Download File</a>`)
-						})
-						.catch((err) => {
-							$("#summary").html(`<p>ERROR: ${err.message}`)
-						})
+					let sortedProductArr = noAdsAndAffProg.concat(affProg.concat(noAds))
+					sortedProductArr.unshift(["Name", "Reviews", "Rating", "URL", "Search Volume", "No Ad Competition", "Has Affiliate Program", "Category"])
+					let csvContent = "data:text/csv;charset=utf-8," + arrayToCsv(sortedProductArr)
+					let encodedUri = encodeURI(csvContent)
+					$("#dl_link").html(`<a href="${encodedUri}" target="_blank" download="${$("#category_name").text()}-${new Date().getTime()}.csv">${$("#category_name").text()}-${new Date().getTime()}.csv</a>`)
 				})
+
+				function arrayToCsv(data) {
+					return data
+						.map(
+							(row) =>
+								row
+									.map(String) // convert every value to String
+									.map((v) => (typeof v === String ? v.replaceAll('"', '""') : v)) // escape double colons
+									.map((v) => `"${v}"`) // quote it
+									.join(",") // comma-separated
+						)
+						.join("\r\n") // rows starting on new lines
+				}
 
 				function getAffProgAvail(products) {
 					console.log("**Atempting to fetch " + products.length + " affiliate program availability.")
@@ -144,13 +200,23 @@
 							axios
 								.post(`http://localhost:8989/hasAffiliateProgram`, { site: product["product_url"] })
 								.then((res) => {
-									$("#aff_" + product["product_id"]).text(res["data"]["result"])
 									if (res["data"]["result"] == true) {
 										$("#has-aff-prog-" + productInd).prop("checked", true)
-									} else {
+										$("#manual_ad_" + productInd).html("<span style='color: red;'>Manual Check</span>")
+										$("#aff_" + product["product_id"]).text("Available")
+									} else if (res["data"]["result"] == false) {
 										$("#row_" + productInd).hide()
+									} else {
+										$("#aff_" + product["product_id"]).html(
+											`<a id="manual_aff_prog_link_${productInd}" href="https://www.google.com/search?q=${encodeURI(product["product_name"].trim() + "+affiliate+program")}&cr=countryUS" target="_blank">${
+												product["product_name"]
+											} + Affiliate Program</a>  <small id="manual_aff_prog_${productInd}"><span style='color: red;'>Manual Check</span></small>`
+										)
+										$("#manual_aff_prog_link_" + productInd).on("click", () => {
+											$("#manual_aff_prog_" + productInd).html("<span style='color: green;'>Manually Checked</span>")
+										})
 									}
-									productsArr[productInd][5] = res["data"]["result"]
+									productsArr[productInd][6] = res["data"]["result"]
 									console.log("**DONE Fetching " + product["product_name"])
 									done(null, { product: product["product_name"], result: res["data"]["result"] })
 								})
