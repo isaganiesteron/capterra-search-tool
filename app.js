@@ -9,17 +9,55 @@ app.engine("html", require("ejs").renderFile)
 app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
 
-const getCapterraCategoryNames = () => {
-	let catHtml = require("./categories").html
-	let dataAliasArr = catHtml.split('<li data-alias-name="')
-	dataAliasArr.shift()
-	let onlyHref = dataAliasArr.map((x) => x.split('<a href="/')[1].split('/"')[0])
-	fs.writeFile("capterra-category-names.json", JSON.stringify({ categorynames: onlyHref }), () => console.log("DONE"))
+let history = {}
+
+// const getCapterraCategoryNames = () => {
+// 	let catHtml = require("./categories").html
+// 	let dataAliasArr = catHtml.split('<li data-alias-name="')
+// 	dataAliasArr.shift()
+// 	let onlyHref = dataAliasArr.map((x) => x.split('<a href="/')[1].split('/"')[0])
+// 	fs.writeFile("capterra-category-names.json", JSON.stringify({ categorynames: onlyHref }), () => console.log("DONE"))
+// }
+
+// const hasSerpAds = (keyword) => {
+// 	return new Promise((resolve, reject) => {
+// 		let googleSearch = `https://www.google.com/search?q=${encodeURI(keyword)}&cr=countryUS`
+// 		console.log("hasSerpAds: " + googleSearch)
+// 		getPageBody(googleSearch)
+// 			.then((res) => {
+// 				let bodyText = JSON.stringify(res).toLowerCase()
+// 				resolve(bodyText.indexOf("About this ad") > -1)
+// 			})
+// 			.catch((err) => {
+// 				console.log(err)
+// 				reject(err)
+// 			})
+// 	})
+// }
+
+const getHistory = () => {
+	return new Promise((resolve, reject) => {
+		fs.readFile("history.json", (err, data) => {
+			if (err) reject(err)
+			history = JSON.parse(data)
+			resolve(JSON.parse(data))
+		})
+	})
+}
+
+const updateHistory = (category) => {
+	return new Promise((resolve, reject) => {
+		let justNames = history["categories"].map((x) => x["name"])
+		let exists = justNames.indexOf(category)
+		if (exists > -1) history["categories"][exists]["date"] = new Date()
+		else history["categories"].push({ name: category, date: new Date() })
+
+		fs.writeFile("history.json", JSON.stringify(history), resolve)
+	})
 }
 
 const hasAffiliateProgram = (website) => {
 	return new Promise((resolve, reject) => {
-		console.log("hasAffiliateProgram: " + website)
 		let searchKeywords = ["affiliate", "ambassador"]
 		getPageBody(website)
 			.then((res) => {
@@ -29,26 +67,7 @@ const hasAffiliateProgram = (website) => {
 				})
 				resolve(result.length > 0)
 			})
-			.catch((err) => {
-				console.log(err)
-				reject(err)
-			})
-	})
-}
-
-const hasSerpAds = (keyword) => {
-	return new Promise((resolve, reject) => {
-		let googleSearch = `https://www.google.com/search?q=${encodeURI(keyword)}&cr=countryUS`
-		console.log("hasSerpAds: " + googleSearch)
-		getPageBody(googleSearch)
-			.then((res) => {
-				let bodyText = JSON.stringify(res).toLowerCase()
-				resolve(bodyText.indexOf("About this ad") > -1)
-			})
-			.catch((err) => {
-				console.log(err)
-				reject(err)
-			})
+			.catch(reject)
 	})
 }
 
@@ -69,7 +88,7 @@ app.post("/hasAffiliateProgram", (req, res) => {
 	try {
 		hasAffiliateProgram(site)
 			.then((result) => {
-				console.log("hasAffiliateProgram SUCCESS: " + result)
+				console.log(site + " => " + result)
 				res.send({ result: result })
 			})
 			.catch((err) => {
@@ -81,11 +100,17 @@ app.post("/hasAffiliateProgram", (req, res) => {
 	}
 })
 
+app.post("/updateHistory", (req, res) => {
+	let { category } = req.body
+	updateHistory(category)
+})
+
 app.get("/", async (req, res) => {
-	res.render(path.join(__dirname, "/index.html"), { data: {} })
+	res.render(path.join(__dirname, "/index.html"), { data: { history } })
 })
 
 const port = 8989
-app.listen(port, () => {
+app.listen(port, async () => {
+	await getHistory()
 	console.log(` ---- Capterra Tool http://localhost:${port}/ ${new Date()}  ---- `)
 })
