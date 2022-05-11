@@ -1,5 +1,6 @@
 const fs = require("fs")
 const { getPageBody } = require("./scraper")
+const { getKwData } = require("./keywordseverywhere")
 const express = require("express")
 const path = require("path")
 const bodyParser = require("body-parser")
@@ -81,6 +82,22 @@ const isValidUrl = (url) => {
 	return true
 }
 
+app.post("/getKwVol", (req, res) => {
+	let { keywords } = req.body
+	try {
+		getKwData(keywords)
+			.then((result) => {
+				console.log(result)
+				res.send({ result: result })
+			})
+			.catch((err) => {
+				console.log(err.message)
+				res.send({ result: err.message })
+			})
+	} catch (err) {
+		res.send({ result: err.message })
+	}
+})
 app.post("/hasAffiliateProgram", (req, res) => {
 	let { site } = req.body
 

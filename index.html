@@ -24,6 +24,10 @@
 
 		<div class="container mt-5">
 			<div class="row">
+				<button type="button" class="btn btn-danger" id="reset_button">RESET</button>
+			</div>
+			<br />
+			<div class="row">
 				<p>There are <span id="capterra_cat_count"></span> categories on Capterra as of 05-04-2022</p>
 				<select class="form-select" aria-label="Default select example" id="capterra_category"></select>
 				<button type="button" class="btn btn-success" id="capterra_category_button">Open Capterra Category Json</button>
@@ -40,7 +44,7 @@
 					<div class="input-group-prepend">
 						<span class="input-group-text">Minimum reviews</span>
 					</div>
-					<input type="text" id="totalReviewFilter" value="50" />
+					<input type="text" id="totalReviewFilter" />
 				</div>
 				<p>Paste the JSON data in the box below</p>
 				<textarea id="raw_json" rows="4"></textarea>
@@ -48,12 +52,12 @@
 				<button type="button" class="btn btn-warning" id="aff_prog_button">Fetch Affiliate Program Availability</button>
 			</div>
 			<br />
-			<div class="row">
+			<!-- <div class="row">
 				<textarea id="keywords" rows="4"></textarea>
 				<a type="button" class="btn btn-info" href="https://searchvolume.io/" target="_blank">Open KW Search Tool</a><br />
 				<button type="button" class="btn btn-success" id="apply_kw_volume_button">Apply Keyword Search Volume</button><br />
 			</div>
-			<br />
+			<br /> -->
 			<div class="row">
 				<h1 id="category_name"></h1>
 				<div id="summary"></div>
@@ -73,8 +77,9 @@
 							<th scope="col">Reviews</th>
 							<th scope="col">Rating</th>
 							<th scope="col">URL</th>
-							<th scope="col">Keywords Search</th>
-
+							<th scope="col">Fetch KW Data</th>
+							<th scope="col">KW Volume</th>
+							<th scope="col">KW Comp</th>
 							<th scope="col">No Ad Competition</th>
 							<th scope="col">Google Ad Competition</th>
 							<th scope="col">Has Affiliate Program</th>
@@ -92,17 +97,31 @@
 
 		<script>
 			$(document).ready(() => {
+				//check for localstorage
+
 				let history = data["history"]["categories"]
 				history.sort((textA, textB) => {
 					return textA["name"] < textB["name"] ? -1 : textA["name"] > textB["name"] ? 1 : 0
 				})
-				let productsArr = []
+
+				let productData = {}
+				// let productsArr = []
 				let jsonObject = {}
 				let keywordsSearch = []
 				let productNames = []
-				let capterraProducts = []
-				let totalReviewFilter = $("#totalReviewFilter").val() || 0
+				// let capterraProducts = []
+				let totalReviewFilter = 50
 
+				if (localStorage.getItem("min_reviews")) {
+					$("#totalReviewFilter").val(localStorage.getItem("min_reviews"))
+					totalReviewFilter = localStorage.getItem("min_reviews")
+				} else {
+					localStorage.setItem("min_reviews", totalReviewFilter)
+				}
+				if (localStorage.getItem("product_data")) productData = JSON.parse(localStorage.getItem("product_data"))
+				if (localStorage.getItem("json")) convertJson(localStorage.getItem("json"))
+
+				$("#totalReviewFilter").val(totalReviewFilter)
 				$("#history_cat_count").text(history.length)
 				$("#capterra_cat_count").text(categorynames.length)
 
@@ -113,89 +132,38 @@
 					let found = history.find((hist) => hist["name"] == cat)
 					catHtml += `<option ${found ? 'style="color:green;"' : ""} value="${cat}">${cat}${found ? " ***" + found["date"] : ""}</option>`
 				})
+
 				$("#capterra_category").html(catHtml)
 
+				$("#totalReviewFilter").on("change", (e) => {
+					localStorage.setItem("min_reviews", $("#totalReviewFilter").val())
+				})
+				$("#reset_button").on("click", (e) => {
+					localStorage.clear()
+				})
 				$("#convert_button").on("click", (e) => {
-					let json = $("#raw_json").val()
-					try {
-						totalReviewFilter = $("#totalReviewFilter").val() || 0
-						jsonObject = JSON.parse(json)
-						if (jsonObject["pageData"]) {
-							if (jsonObject["pageData"]["categoryData"]) {
-								if (jsonObject["pageData"]["categoryData"]["products"]) {
-									$("#category_name").html(jsonObject["pageData"]["categoryData"]["htmlName"])
-									$("#results").html("")
-									let html = ""
-									capterraProducts = jsonObject["pageData"]["categoryData"]["products"].filter((product) => parseInt(product["total_reviews"]) >= totalReviewFilter)
-									capterraProducts.forEach((product, productInd) => {
-										productsArr.push([product["product_name"].trim(), product["total_reviews"], product["sort_options"]["sort_review_rating"].toFixed(2), product["product_url"], 0, false, false, jsonObject["pageData"]["categoryData"]["htmlName"]])
-
-										html += `<tr id="row_${productInd}">
-															<th scope="row">${product["product_name"]}</th>
-															<td>${product["total_reviews"]}</td>
-															<td>${product["sort_options"]["sort_review_rating"].toFixed(2)}</td>
-															<td><a href="${product["product_url"]}" target="_blank">${product["product_name"]}</a></td>
-															<td><span id="${productInd}_kw_vol"></span></td>
-															<th><input class="form-check-input no-comp" type="checkbox" value="" id="no-comp-${productInd}" name="${product["product_name"]}"></th>
-															<td><a class="manual_ad_comp_link" id="manual_ad_comp_${productInd}" href="https://www.google.com/search?q=${encodeURI(product["product_name"])}&cr=countryUS" target="_blank">${product["product_name"]}</a> <small id="manual_ad_${productInd}"></small></td>
-															<th><input class="form-check-input has-aff-prog" type="checkbox" value="" id="has-aff-prog-${productInd}"></th>
-															<td class="aff" id="aff_${product["product_id"]}">NA</td>
-														</tr>`
-									})
-									$("#results").html(html)
-									$("#summary").html(`<p>Total: ${capterraProducts.length} (Atleast ${totalReviewFilter} reviews)`)
-									$(".no-comp").on("click", (e) => {
-										let isSelected = $(e.currentTarget).is(":checked")
-										let productInd = $(e.currentTarget).attr("id").split("no-comp-")[1]
-										let productName = $(e.currentTarget).attr("name")
-										let hasAffChecked = $("#has-aff-prog-" + productInd).is(":checked")
-										productsArr[productInd][5] = isSelected
-										if (isSelected && hasAffChecked) {
-											keywordsSearch.push(productName)
-										} else {
-											let index = keywordsSearch.indexOf(productName)
-											keywordsSearch.splice(index, 1)
-										}
-										$("#keywords").html(keywordsSearch.join("\r\n"))
-									})
-									$(".has-aff-prog").on("click", (e) => {
-										let isSelected = $(e.currentTarget).is(":checked")
-										let productInd = $(e.currentTarget).attr("id").split("has-aff-prog-")[1]
-										productsArr[productInd][6] = isSelected
-									})
-									$(".manual_ad_comp_link").on("click", (e) => {
-										let productInd = $(e.currentTarget).attr("id").split("manual_ad_comp_")[1]
-										$("#manual_ad_" + productInd).html("<span style='color: green;'>Manually Checked</span>")
-									})
-
-									axios.post(`http://localhost:8989/updateHistory`, { category: jsonObject["pageData"]["categoryData"]["htmlName"] })
-								} else alert("products missing")
-							} else alert("categoryData missing")
-						} else alert("pageData Missing")
-					} catch (err) {
-						console.log(err.message)
-					}
+					convertJson($("#raw_json").val())
 				})
 
 				$("#apply_kw_volume_button").on("click", () => {
-					let keywordvalues = $("#keywords").val()
-					keywordvalues = keywordvalues.split(`Keyword;Avg. monthly searches`)[1]
-					keywordvalues = keywordvalues.split("\n").filter((x) => x != "")
-					keywordvalues.forEach((kw) => {
-						let kwArr = kw.split(";")
-						let curInd = -1
-						productsArr.forEach((prod, prodInd) => {
-							if (prod[0].toLowerCase() == kwArr[0].toLowerCase()) curInd = prodInd
-						})
-						if (productsArr[curInd]) {
-							$(`#${curInd}_kw_vol`).text(kwArr[1])
-							productsArr[curInd][4] = kwArr[1]
-						} else console.log(" ***Couldn't find => " + kwArr[0].toLowerCase())
-					})
+					// let keywordvalues = $("#keywords").val()
+					// keywordvalues = keywordvalues.split(`Keyword;Avg. monthly searches`)[1]
+					// keywordvalues = keywordvalues.split("\n").filter((x) => x != "")
+					// keywordvalues.forEach((kw) => {
+					// 	let kwArr = kw.split(";")
+					// 	let curInd = -1
+					// 	productsArr.forEach((prod, prodInd) => {
+					// 		if (prod[0].toLowerCase() == kwArr[0].toLowerCase()) curInd = prodInd
+					// 	})
+					// 	if (productsArr[curInd]) {
+					// 		$(`#${curInd}_kw_vol`).text(kwArr[1])
+					// 		productsArr[curInd][4] = kwArr[1]
+					// 	} else console.log(" ***Couldn't find => " + kwArr[0].toLowerCase())
+					// })
 				})
 
 				$("#aff_prog_button").on("click", () => {
-					getAffProgAvail(capterraProducts)
+					getAffProgAvail()
 				})
 
 				$("#save_button").on("click", () => {
@@ -203,13 +171,28 @@
 					let affProg = []
 					let noAds = []
 					let rest = []
-					productsArr.forEach((prod) => {
-						if (prod[4] && prod[5]) noAdsAndAffProg.push(prod)
-						else if (prod[5]) affProg.push(prod)
-						else if (prod[4]) noAds.push(prod)
+
+					let productsArr = Object.keys(productData).map((key) => {
+						return [
+							productData[key]["name"],
+							productData[key]["tot_rating"],
+							productData[key]["rating"],
+							productData[key]["url"],
+							productData[key]["keyword_vol"],
+							productData[key]["keyword_comp"],
+							productData[key]["ad_comp"] == true ? true : false,
+							productData[key]["aff_prog"] == true ? true : false,
+							$("#category_name").text(),
+						]
 					})
-					let sortedProductArr = noAdsAndAffProg.concat(affProg.concat(noAds))
-					sortedProductArr.unshift(["Name", "Reviews", "Rating", "URL", "Search Volume", "No Ad Competition", "Has Affiliate Program", "Category"])
+					// productsArr.forEach((prod) => {
+					// 	if (prod[7] && prod[8]) noAdsAndAffProg.push(prod)
+					// 	else if (prod[8]) affProg.push(prod)
+					// 	else if (prod[7]) noAds.push(prod)
+					// })
+					// let sortedProductArr = noAdsAndAffProg.concat(affProg.concat(noAds))
+					let sortedProductArr = productsArr.filter((prod) => prod[6] && prod[7])
+					sortedProductArr.unshift(["Name", "Reviews", "Rating", "URL", "Search Volume", "Search Competition", "No Ad Competition", "Has Affiliate Program", "Category"])
 					let csvContent = "data:text/csv;charset=utf-8," + arrayToCsv(sortedProductArr)
 					let encodedUri = encodeURI(csvContent)
 					$("#dl_link").html(`<a href="${encodedUri}" target="_blank" download="${$("#category_name").text()}-${new Date().getTime()}.csv">${$("#category_name").text()}-${new Date().getTime()}.csv</a>`)
@@ -220,6 +203,155 @@
 					if (!$("#capterra_category").val()) return console.log("Category is empty.")
 					window.open(`https://www.capterra.com/directoryPage/rest/v1/category?htmlName=${$("#capterra_category").val()}&rbr=false&countryCode=US`, "_blank")
 				})
+
+				function convertJson(json) {
+					try {
+						localStorage.setItem("json", json)
+						totalReviewFilter = $("#totalReviewFilter").val() || 0
+						jsonObject = JSON.parse(json)
+						if (jsonObject["pageData"]) {
+							if (jsonObject["pageData"]["categoryData"]) {
+								if (jsonObject["pageData"]["categoryData"]["products"]) {
+									$("#category_name").html(jsonObject["pageData"]["categoryData"]["htmlName"])
+									$("#results").html("")
+									let html = ""
+									let capterraProducts = jsonObject["pageData"]["categoryData"]["products"].filter((product) => parseInt(product["total_reviews"]) >= totalReviewFilter)
+									capterraProducts.forEach((product, productInd) => {
+										if (!productData[product["product_id"]]) {
+											productData[product["product_id"]] = {
+												name: product["product_name"].trim(),
+												tot_rating: product["total_reviews"],
+												rating: product["sort_options"]["sort_review_rating"].toFixed(2),
+												url: product["product_url"],
+												keyword_vol: 0,
+												keyword_comp: 0,
+												ad_comp: false,
+												ad_comp_checked: "NA",
+												aff_prog: "NA",
+												aff_prog_checked: false,
+												aff_prog_status: "NA",
+											}
+											localStorage.setItem("product_data", JSON.stringify(productData))
+										}
+
+										let ad_comp_selected = productData[product["product_id"]]["ad_comp"] == true ? "checked" : ""
+										let aff_prog_checked = productData[product["product_id"]]["aff_prog"] == true ? "checked" : ""
+										let ad_comp_checked = productData[product["product_id"]]["ad_comp_checked"] == true ? `<span style='color: green;'>Manually Checked</span>` : productData[product["product_id"]]["ad_comp_checked"] == false ? `<span style='color: red;'>Manual Check</span>` : ""
+
+										let aff_prog_status = productData[product["product_id"]]["aff_prog_status"]
+										if (aff_prog_status == "Manual Check") {
+											aff_prog_status = `<a class="manual_aff_prog_link" id="manual_aff_prog_link_${product["product_id"]}" href="https://www.google.com/search?q=${encodeURI(
+												productData[product["product_id"]]["name"].trim() + "+affiliate+program"
+											)}&cr=countryUS" target="_blank">${productData[product["product_id"]]["name"].trim()} + Affiliate Program</a>  <small id="manual_aff_prog_${product["product_id"]}"><span style='color: red;'>Manual Check</span></small>`
+										} else if (aff_prog_status == "Checked Manually") {
+											aff_prog_status = `<a class="manual_aff_prog_link" id="manual_aff_prog_link_${product["product_id"]}" href="https://www.google.com/search?q=${encodeURI(
+												productData[product["product_id"]]["name"].trim() + "+affiliate+program"
+											)}&cr=countryUS" target="_blank">${productData[product["product_id"]]["name"].trim()} + Affiliate Program</a>  <small id="manual_aff_prog_${product["product_id"]}"><span style='color: green;'>Manually Checked</span>`
+										}
+
+										html += `<tr id="row_${product["product_id"]}">
+															<th scope="row">${productData[product["product_id"]]["name"]}</th>
+															<td>${productData[product["product_id"]]["tot_rating"]}</td>
+															<td>${productData[product["product_id"]]["rating"]}</td>
+															<td><a href="${productData[product["product_id"]]["url"]}" target="_blank">${productData[product["product_id"]]["name"]}</a></td>
+                              <td><button class="btn btn-link fetch_kw_vol" id="fetch_kw_vol_${product["product_id"]}">Fetch</button></td>
+															<td><span id="${product["product_id"]}_kw_vol">${productData[product["product_id"]]["keyword_vol"]}</span></td>
+															<td><span id="${product["product_id"]}_kw_comp">${productData[product["product_id"]]["keyword_comp"]}</span></td>
+															<th><input class="form-check-input no-comp id_${product["product_id"]}" type="checkbox" value="" id="no-comp-${product["product_id"]}" name="${productData[product["product_id"]]["name"]}" ${ad_comp_selected}></th>
+															<td><a class="manual_ad_comp_link id_${product["product_id"]}" id="manual_ad_comp_${product["product_id"]}" href="https://www.google.com/search?q=${encodeURI(productData[product["product_id"]]["name"])}&cr=countryUS" target="_blank">${
+											productData[product["product_id"]]["name"]
+										}</a> <small id="manual_ad_${product["product_id"]}">${ad_comp_checked}</small></td>
+															<th><input class="form-check-input has-aff-prog id_${product["product_id"]}" type="checkbox" value="" id="has-aff-prog-${product["product_id"]}" ${aff_prog_checked}></th>
+															<td class="aff" id="aff_${product["product_id"]}">${aff_prog_status}</td>
+														</tr>`
+									})
+
+									$("#results").html(html)
+									initAfflinkButton()
+
+									$("#summary").html(`<p>Total: ${capterraProducts.length} (Atleast ${totalReviewFilter} reviews)`)
+
+									$(".no-comp").on("click", (e) => {
+										let productId = $(e.currentTarget)
+											.attr("class")
+											.split(" ")
+											.find((x) => x.indexOf("id_") > -1)
+											.split("id_")[1]
+										let isSelected = $(e.currentTarget).is(":checked")
+										let productInd = $(e.currentTarget).attr("id").split("no-comp-")[1]
+										let productName = $(e.currentTarget).attr("name")
+										let hasAffChecked = $("#has-aff-prog-" + productInd).is(":checked")
+
+										//productsArr[productInd][5] = isSelected
+										productData[productId]["ad_comp"] = isSelected
+
+										if (isSelected && hasAffChecked) keywordsSearch.push(productName)
+										else keywordsSearch.splice(keywordsSearch.indexOf(productName), 1)
+
+										$("#keywords").html(keywordsSearch.join("\r\n"))
+										localStorage.setItem("product_data", JSON.stringify(productData))
+									})
+
+									$(".has-aff-prog").on("click", (e) => {
+										let productId = $(e.currentTarget)
+											.attr("class")
+											.split(" ")
+											.find((x) => x.indexOf("id_") > -1)
+											.split("id_")[1]
+										let isSelected = $(e.currentTarget).is(":checked")
+										let productInd = $(e.currentTarget).attr("id").split("has-aff-prog-")[1]
+										//productsArr[productInd][6] = isSelected
+
+										productData[productId]["aff_prog"] = isSelected
+										localStorage.setItem("product_data", JSON.stringify(productData))
+									})
+
+									$(".manual_ad_comp_link").on("click", (e) => {
+										let productId = $(e.currentTarget)
+											.attr("class")
+											.split(" ")
+											.find((x) => x.indexOf("id_") > -1)
+											.split("id_")[1]
+										let productInd = $(e.currentTarget).attr("id").split("manual_ad_comp_")[1]
+
+										productData[productId]["ad_comp_checked"] = true
+										localStorage.setItem("product_data", JSON.stringify(productData))
+
+										$("#manual_ad_" + productInd).html("<span style='color: green;'>Manually Checked</span>")
+									})
+
+									$(".fetch_kw_vol").on("click", (e) => {
+										let productId = $(e.currentTarget)
+											.attr("id")
+											.split(" ")
+											.find((x) => x.indexOf("fetch_kw_vol_") > -1)
+											.split("fetch_kw_vol_")[1]
+
+										axios
+											.post(`http://localhost:8989/getKwVol`, { keywords: [productData[productId]["name"]] })
+											.then((res) => {
+												let kwVol = res.data.result.data[0]["vol"] ? res.data.result.data[0]["vol"] : "NA"
+												let kwComp = res.data.result.data[0]["competition"] ? res.data.result.data[0]["competition"] : "NA"
+												$("#" + productId + "_kw_vol").text(kwVol)
+												$("#" + productId + "_kw_comp").text(kwComp)
+												productData[productId]["keyword_vol"] = kwVol
+												productData[productId]["keyword_comp"] = kwComp
+												localStorage.setItem("product_data", JSON.stringify(productData))
+											})
+											.catch((err) => {
+												console.log(err)
+												$("#" + productId + "_kw_vol").text(err.message)
+											})
+									})
+
+									axios.post(`http://localhost:8989/updateHistory`, { category: jsonObject["pageData"]["categoryData"]["htmlName"] })
+								} else alert("products missing")
+							} else alert("categoryData missing")
+						} else alert("pageData Missing")
+					} catch (err) {
+						console.log(err.message)
+					}
+				}
 
 				function arrayToCsv(data) {
 					return data
@@ -234,58 +366,97 @@
 						.join("\r\n") // rows starting on new lines
 				}
 
-				function getAffProgAvail(products) {
-					console.log("**Atempting to fetch " + products.length + " affiliate program availability.")
+				function getAffProgAvail() {
+					let productKeys = Object.keys(productData).filter((key) => !productData[key]["aff_prog_checked"])
 
-					let statusHtml = `<p>0/${products.length} completed.</p>`
+					console.log("**Atempting to fetch " + productKeys.length + " affiliate program availability.")
+					let statusHtml = `<p>0/${productData.length} completed.</p>`
 					$("#status").html(statusHtml)
-
-					let processes = products.map((product, productInd) => {
+					let processes = productKeys.map((productKey, productKeyInd) => {
 						return (done) => {
-							let statusHtml = `<p>${productInd}/${products.length} completed.</p>`
-							statusHtml += `<p>Fetching Affiliate Program Availability for <b>${product["product_name"]}</b>...</p>`
+							let statusHtml = `<p>${productKeyInd}/${productKeys.length} completed.</p>`
+							statusHtml += `<p>Fetching Affiliate Program Availability for <b>${productData[productKey]["name"]}</b>...</p>`
 							$("#status").html(statusHtml)
-							console.log("START Fetching " + product["product_name"])
-							$("#aff_" + product["product_id"]).text("fetching...")
+							console.log("START Fetching " + productData[productKey]["name"])
+							$("#aff_" + productKey).text("fetching...")
+
 							axios
-								.post(`http://localhost:8989/hasAffiliateProgram`, { site: product["product_url"] })
+								.post(`http://localhost:8989/hasAffiliateProgram`, { site: productData[productKey]["url"] })
+								// fakeRequest(productData[productKey]["url"])
 								.then((res) => {
 									if (res["data"]["result"] == true) {
-										$("#has-aff-prog-" + productInd).prop("checked", true)
-										$("#manual_ad_" + productInd).html("<span style='color: red;'>Manual Check</span>")
-										$("#aff_" + product["product_id"]).text("Available")
+										$("#has-aff-prog-" + productKey).prop("checked", true)
+										$("#manual_ad_" + productKey).html("<span style='color: red;'>Manual Check</span>")
+										$("#aff_" + productKey).text("Available")
+
+										productData[productKey]["ad_comp_checked"] = false
+										productData[productKey]["aff_prog"] = true
+										productData[productKey]["aff_prog_status"] = "Available"
 									} else if (res["data"]["result"] == false) {
-										$("#row_" + productInd).hide()
+										productData[productKey]["aff_prog"] = false
+										productData[productKey]["aff_prog_status"] = "Not Available"
+										$("#aff_" + productKey).text("Not Available")
+										$("#row_" + productKey).hide()
 									} else {
-										$("#aff_" + product["product_id"]).html(
-											`<a id="manual_aff_prog_link_${productInd}" href="https://www.google.com/search?q=${encodeURI(product["product_name"].trim() + "+affiliate+program")}&cr=countryUS" target="_blank">${
-												product["product_name"]
-											} + Affiliate Program</a>  <small id="manual_aff_prog_${productInd}"><span style='color: red;'>Manual Check</span></small>`
+										$("#aff_" + productKey).html(
+											`<a class="manual_aff_prog_link" id="manual_aff_prog_link_${productKey}" href="https://www.google.com/search?q=${encodeURI(productData[productKey]["name"].trim() + "+affiliate+program")}&cr=countryUS" target="_blank">${productData[productKey][
+												"name"
+											].trim()} + Affiliate Program</a>  <small id="manual_aff_prog_${productKey}"><span style='color: red;'>Manual Check</span></small>`
 										)
-										$("#manual_aff_prog_link_" + productInd).on("click", () => {
-											$("#manual_aff_prog_" + productInd).html("<span style='color: green;'>Manually Checked</span>")
-										})
+										productData[productKey]["aff_prog_status"] = "Manual Check"
+										initAfflinkButton()
+										// $("#manual_aff_prog_link_" + productKey).on("click", () => {
+										// 	$("#manual_aff_prog_" + productKey).html("<span style='color: green;'>Manually Checked</span>")
+										// })
 									}
-									productsArr[productInd][6] = res["data"]["result"]
-									console.log("**DONE Fetching " + product["product_name"])
-									done(null, { product: product["product_name"], result: res["data"]["result"] })
+
+									console.log("**DONE Fetching " + productData[productKey]["name"])
+
+									productData[productKey]["aff_prog_checked"] = true
+									localStorage.setItem("product_data", JSON.stringify(productData))
+									done(null, { product: productData[productKey]["name"], result: res["data"]["result"] })
 								})
 								.catch((err) => {
-									$("#aff_" + product["product_id"]).text(err.message)
-									console.log("**DONE Fetching " + product["product_name"])
-									done(null, { product: product["product_name"], result: false })
+									$("#aff_" + productKey).text(err.message)
+									console.log("**DONE Fetching " + productData[productKey]["name"])
+
+									localStorage.setItem("product_data", JSON.stringify(productData))
+									done(null, { product: productData[productKey]["name"], result: false })
 								})
 						}
 					})
 
 					async.series(processes, (err, res) => {
-						console.log("**DONE FETCHING " + products.length + " products affiliate program availability.")
-						let statusHtml = `<p>${products.length}/${products.length} completed.</p>`
+						console.log("**DONE FETCHING " + productKeys.length + " products affiliate program availability.")
+						let statusHtml = `<p>${productKeys.length}/${productKeys.length} completed.</p>`
 						statusHtml += `<p>Fetching Complete.</p>`
 						$("#status").html(statusHtml)
 					})
 				}
+
+				function initAfflinkButton() {
+					$(".manual_aff_prog_link").on("click", (e) => {
+						let productId = $(e.currentTarget)
+							.attr("id")
+							.split(" ")
+							.find((x) => x.indexOf("manual_aff_prog_link_") > -1)
+							.split("manual_aff_prog_link_")[1]
+						$("#manual_aff_prog_" + productId).html("<span style='color: green;'>Manually Checked</span>")
+						productData[productId]["aff_prog_status"] = "Checked Manually"
+						localStorage.setItem("product_data", JSON.stringify(productData))
+					})
+				}
 			})
+
+			function fakeRequest(url) {
+				return new Promise((resolve, reject) => {
+					setTimeout(() => {
+						console.log("Simulate false")
+						resolve({ data: { result: "cannot be" } })
+						// reject(new Error("ERROR"))
+					}, 300)
+				})
+			}
 
 			let categorynames = [
 				"360-degree-feedback-software",
